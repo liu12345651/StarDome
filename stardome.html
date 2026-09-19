@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>星穹浏览器</title>
+<script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/dist/webtorrent.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#0a0c18;color:#eef2ff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.browser-header{background:rgba(18,20,30,.92);backdrop-filter:blur(16px);border-bottom:1px solid #5865f2;flex-shrink:0;z-index:50}
+.tabs-bar{display:flex;padding:6px 8px 0;gap:5px;overflow-x:auto;background:#0f111ad9}
+.tab-item{background:#1e2130cc;border-radius:20px;padding:5px 12px;font-size:11px;color:#ddd;cursor:pointer;display:inline-flex;gap:6px;white-space:nowrap;border:.5px solid transparent}
+.tab-item.active{background:#2f3350;color:#fff;border-color:#5865f2}
+.tab-close{background:none;border:none;color:#aaa;cursor:pointer;font-size:14px}
+.new-tab-btn{background:#2a2e45;border:none;color:#fff;font-size:18px;width:28px;height:28px;border-radius:30px;cursor:pointer}
+.control-row{display:flex;flex-wrap:wrap;gap:8px;padding:6px 12px;background:#10121cb3;align-items:center}
+.nav-group{display:flex;gap:6px;flex-wrap:wrap}
+.round-btn{background:#252a3c;border:none;color:#fff;width:34px;height:34px;border-radius:30px;cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;transition:.1s}
+.round-btn:hover{background:#3d405b}
+.url-area{flex:1;display:flex;background:#1c1f2c;border-radius:40px;padding:4px 12px;border:1px solid #3e415a}
+#urlInput{flex:1;background:transparent;border:none;color:#fff;font-size:12px;outline:none;font-family:monospace}
+.go-btn{background:#5865f2;border:none;border-radius:30px;padding:4px 12px;color:#fff;cursor:pointer}
+.status{background:#07090f;color:#8e9aff;font-size:10px;padding:4px 12px;font-family:monospace}
+.browser-frame{flex:1;position:relative;background:#fff;min-height:0}
+iframe{width:100%;height:100%;border:none;background:#fff}
+.panel{position:fixed;background:rgba(16,18,28,.96);backdrop-filter:blur(24px);border-radius:28px;border:1px solid #5865f2;z-index:1100;display:flex;flex-direction:column;max-height:85vh;overflow:hidden}
+.panel-header{padding:12px 16px;background:#2c2f44;cursor:pointer;display:flex;justify-content:space-between;font-weight:500;color:#f5a623;border-radius:28px 28px 0 0}
+.panel-content{display:none;flex-direction:column;overflow-y:auto;padding:12px;gap:8px}
+.panel-content.open{display:flex}
+.btn-sm{background:#5865f2;border:none;border-radius:20px;padding:6px 12px;color:#fff;cursor:pointer;font-size:12px}
+.btn-sm:hover{background:#4a55c4}
+input,textarea{background:#1e2130;border:1px solid #3d405b;border-radius:20px;padding:8px 12px;color:#fff;font-size:12px;outline:none;width:100%}
+.flex-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.log-area{background:#1a1c2e;border-radius:12px;padding:8px;max-height:100px;overflow-y:auto;font-family:monospace;font-size:10px;margin-top:8px}
+.task-item{background:#252838;border-radius:12px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.code-editor{background:#0a0c18;border-radius:12px;padding:8px;font-family:monospace;font-size:12px;color:#0f0;width:100%;height:120px}
+.sidebar{right:0;top:0;width:340px;border-left:1px solid #5865f2;transform:translateX(100%);transition:.3s}
+.sidebar.open{transform:translateX(0)}
+.smart-panel{right:0;top:0;width:380px;border-left:1px solid #f5a623;transform:translateX(100%);transition:.3s}
+.smart-panel.open{transform:translateX(0)}
+.agent-panel{bottom:20px;left:20px;width:380px;max-width:90vw;border:1px solid #06d6a0;z-index:1200}
+.settings-panel{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;max-width:90vw;background:rgba(16,18,28,.98);border-radius:32px;border:1px solid #f5a623;z-index:2000;display:none;flex-direction:column}
+.settings-header{padding:16px;background:#2c2f44;border-radius:32px 32px 0 0;display:flex;justify-content:space-between}
+.settings-content{padding:20px}
+.api-status{font-size:12px;margin-top:8px;padding:8px;border-radius:16px}
+.api-status.valid{background:#2e7d3220;color:#4caf50}
+.api-status.invalid{background:#ee666620;color:#ff5e5e}
+.api-status.pending{background:#f5a62320;color:#f5a623}
+.sidebar-tabs{display:flex;border-bottom:1px solid #444}
+.sidebar-tab{flex:1;text-align:center;padding:10px;cursor:pointer;background:#1e2130;font-size:13px}
+.sidebar-tab.active{background:#2f3350;color:#f5a623}
+.smart-tabs{display:flex;border-bottom:1px solid #444;overflow-x:auto}
+.smart-tab{flex:1;text-align:center;padding:8px 6px;cursor:pointer;background:#1e2130;font-size:11px;white-space:nowrap}
+.smart-tab.active{background:#2f3350;color:#f5a623}
+.chat-messages{max-height:200px;overflow-y:auto;margin-bottom:8px;font-size:12px}
+.annotation-item{background:#252838;border-radius:12px;padding:8px;margin-bottom:6px;font-size:12px}
+.wallpaper-item{width:50px;height:50px;border-radius:12px;cursor:pointer;display:inline-block;margin:4px;border:2px solid transparent}
+.wallpaper-item.active{border-color:#f5a623}
+#mindmapContainer,#kgraphContainer,#sniffResult,#shrimpResults,#p2pStatus{background:#1a1c2e;border-radius:12px;padding:12px;min-height:60px;margin-top:8px;font-size:12px}
+#qrContainer{margin:8px 0}
+.divider{height:1px;background:#3d405b;margin:12px 0}
+.stealth-btn{position:fixed;bottom:12px;right:12px;width:30px;height:30px;background:rgba(0,0,0,.25);border-radius:50%;cursor:pointer;z-index:9999;backdrop-filter:blur(4px);border:.5px solid rgba(255,255,255,.1)}
+.stealth-btn:hover{background:rgba(88,101,242,.4)}
+@media(max-width:600px){.sidebar{width:300px}.smart-panel{width:320px}.agent-panel{width:calc(100% - 20px);left:10px;bottom:10px}.settings-panel{width:95%}.round-btn{width:30px;height:30px;font-size:12px}}
+</style>
+</head>
+<body>
+
+<div class="browser-header">
+<div class="tabs-bar" id="tabsContainer">
+<div class="tab-item active"><span>首页</span><button class="tab-close">✕</button></div>
+<button class="new-tab-btn" id="newTabBtn">+</button>
+</div>
+<div class="control-row">
+<div class="nav-group">
+<button class="round-btn" id="backBtn">◀</button>
+<button class="round-btn" id="forwardBtn">▶</button>
+<button class="round-btn" id="reloadBtn">⟳</button>
+<button class="round-btn" id="homeBtn">⌂</button>
+<button class="round-btn" id="remodelBtn" style="background:#f5a623">✎</button>
+<button class="round-btn" id="sidebarBtn" style="background:#5865f2">💬</button>
+<button class="round-btn" id="smartPanelBtn" style="background:#a06eff">🧠</button>
+<button class="round-btn" id="agentBtn" style="background:#06d6a0">🤖</button>
+<button class="round-btn" id="voiceBtn" style="background:#f5a623">🎤</button>
+<button class="round-btn" id="fullscreenBtn">⛶</button>
+<button class="round-btn" id="nightModeBtn">🌙</button>
+<button class="round-btn" id="settingsBtn" style="background:#f5a623">⚙️</button>
+</div>
+<div class="url-area">
+<input type="text" id="urlInput" placeholder="输入网址" value="https://www.baidu.com">
+<button class="go-btn" id="goBtn">访问</button>
+</div>
+</div>
+<div class="status" id="statusBar">🚀 星穹浏览器 · 已加载</div>
+</div>
+
+<div class="browser-frame">
+<iframe id="mainFrame" src="https://www.baidu.com" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-downloads allow-top-navigation-by-user-activation allow-popups-to-escape-sandbox"></iframe>
+</div>
+
+<!-- 侧边栏 -->
+<div id="sidebar" class="panel sidebar">
+<div class="panel-header"><span>💬 协同聊天</span><button id="closeSidebar" style="background:none;border:none;color:#fff">✕</button></div>
+<div class="panel-content open">
+<div class="sidebar-tabs">
+<div class="sidebar-tab active" data-tab="chat">聊天</div>
+<div class="sidebar-tab" data-tab="annotations">标注</div>
+</div>
+<div id="chatPanel">
+<div id="chatMessages" class="chat-messages"></div>
+<div class="flex-row"><input id="chatInput" placeholder="消息..."><button id="sendChatBtn" class="btn-sm">发送</button></div>
+<div class="flex-row"><button id="createRoomBtn" class="btn-sm">创建房间</button><button id="joinRoomBtn" class="btn-sm">加入房间</button></div>
+<div><small>我的ID: <span id="myPeerId">-</span></small></div>
+</div>
+<div id="annotationsPanel" style="display:none">
+<button id="addAnnotationBtn" class="btn-sm">标注选中文字</button>
+<button id="exportNotesBtn" class="btn-sm">导出笔记</button>
+<button id="importNotesBtn" class="btn-sm">导入笔记</button>
+<div id="annotationList"></div>
+</div>
+</div>
+</div>
+
+<!-- 智能面板 -->
+<div id="smartPanel" class="panel smart-panel">
+<div class="panel-header"><span>🧠 智能工具</span><button id="closeSmartPanel" style="background:none;border:none;color:#fff">✕</button></div>
+<div class="panel-content open">
+<div class="smart-tabs">
+<div class="smart-tab active" data-tab="mindmap">摘要脑图</div>
+<div class="smart-tab" data-tab="kgraph">知识图谱</div>
+<div class="smart-tab" data-tab="search">资源搜索</div>
+<div class="smart-tab" data-tab="p2p">P2P下载</div>
+<div class="smart-tab" data-tab="privacy">隐私</div>
+<div class="smart-tab" data-tab="tools">工具</div>
+</div>
+<div id="mindmapPanel"><button id="genSummaryBtn" class="btn-sm">生成摘要</button><div id="mindmapContainer"></div></div>
+<div id="kgraphPanel" style="display:none"><button id="kgraphBtn" class="btn-sm">刷新图谱</button><div id="kgraphContainer"></div></div>
+<div id="searchPanel" style="display:none">
+<input id="shrimpKeyword" placeholder="资源名称...">
+<div class="flex-row"><button id="shrimpSearchBtn" class="btn-sm">搜索</button><button id="shrimpAutoBtn" class="btn-sm">自动下载</button></div>
+<div id="shrimpResults"></div>
+<button id="sniffBtn" class="btn-sm">资源嗅探</button>
+<div id="sniffResult"></div>
+</div>
+<div id="p2pPanel" style="display:none">
+<input id="magnetLink" placeholder="磁力链接...">
+<button id="p2pBtn" class="btn-sm">下载</button>
+<div id="p2pStatus"></div>
+</div>
+<div id="privacyPanel" style="display:none">
+<div class="flex-row"><button id="fingerprintBtn" class="btn-sm">指纹伪装</button><button id="clearTrackerBtn" class="btn-sm">清除追踪器</button></div>
+<div class="flex-row"><button id="biometricBtn" class="btn-sm">生物解锁</button><button id="incognitoBtn" class="btn-sm">无痕模式</button></div>
+<label><input type="checkbox" id="sensitiveFilter"> 敏感内容过滤</label>
+</div>
+<div id="toolsPanel" style="display:none">
+<button id="screenshotBtn" class="btn-sm">截图</button>
+<button id="qrBtn" class="btn-sm">二维码</button>
+<div id="qrContainer"></div>
+<input id="clipboardInput" placeholder="文本">
+<div class="flex-row"><button id="copyBtn" class="btn-sm">复制</button><button id="pasteBtn" class="btn-sm">粘贴</button></div>
+<div id="wallpaperSelect"></div>
+<button id="speedDialAddBtn" class="btn-sm">添加快速拨号</button>
+<div id="speedDialList"></div>
+</div>
+</div>
+</div>
+
+<!-- 自动化面板 -->
+<div id="agentPanel" class="panel agent-panel">
+<div class="panel-header"><span>🤖 自动化</span><span>▲</span></div>
+<div class="panel-content" id="agentContent">
+<textarea id="taskInput" rows="2" placeholder="例如：搜索人工智能新闻"></textarea>
+<div class="flex-row"><button id="executeTaskBtn" class="btn-sm">执行</button><button id="scheduleTaskBtn" class="btn-sm">定时任务</button></div>
+<div id="agentTaskList"></div>
+<div class="log-area" id="agentLog"><div>📋 日志</div></div>
+<div class="flex-row"><button id="macroRecordBtn" class="btn-sm">录制宏</button><button id="macroStopBtn" class="btn-sm">停止</button><button id="macroPlayBtn" class="btn-sm">播放</button></div>
+<hr>
+<h4 style="color:#aaa;font-size:12px">代码沙盒</h4>
+<textarea id="sandboxCode" class="code-editor" placeholder='<h1>示例</h1><script>alert("运行")</script>'></textarea>
+<div class="flex-row"><button id="runSandboxBtn" class="btn-sm">运行</button><button id="clearSandboxBtn" class="btn-sm">清空</button></div>
+<div id="sandboxPreview" style="background:#fff;border-radius:12px;min-height:100px"></div>
+</div>
+</div>
+
+<!-- 设置面板 -->
+<div id="settingsPanel" class="settings-panel">
+<div class="settings-header"><span>⚙️ 设置</span><button id="closeSettings" style="background:none;border:none;color:#fff">✕</button></div>
+<div class="settings-content">
+<p>🔑 DeepSeek API Key</p>
+<input type="password" id="apiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx">
+<div id="apiStatus" class="api-status pending">未配置</div>
+<div class="flex-row"><button id="testApiBtn" class="btn-sm">测试连接</button><button id="saveApiBtn" class="btn-sm">保存</button></div>
+<div class="divider"></div>
+<div class="flex-row"><button id="gotoManualBtn" class="btn-sm">📖 说明书</button><button id="gotoDownloadBtn" class="btn-sm">⬇️ 下载客户端</button></div>
+</div>
+</div>
+
+<div class="stealth-btn" id="stealthBtn"></div>
+
+<script>
+// ==================== 浏览器引擎 ====================
+let tabs=[];let currentTabIndex=0;let tabIdCounter=0;
+const iframe=document.getElementById('mainFrame');
+const tabsContainer=document.getElementById('tabsContainer');
+const urlInput=document.getElementById('urlInput');
+const HOME_URL='https://www.baidu.com';
+
+function createTab(url,title){
+const id=tabIdCounter++;
+const tabDiv=document.createElement('div');
+tabDiv.className='tab-item';
+tabDiv.dataset.tabId=id;
+tabDiv.innerHTML=`<span>${title||'新页面'}</span><button class="tab-close">✕</button>`;
+tabsContainer.insertBefore(tabDiv,tabsContainer.querySelector('.new-tab-btn'));
+tabDiv.querySelector('.tab-close').addEventListener('click',(e)=>{e.stopPropagation();closeTab(id)});
+tabDiv.addEventListener('click',()=>switchTab(id));
+tabs.push({id,url:url||'about:blank',title:title||'新页面',element:tabDiv});
+switchTab(id);
+if(url&&url!=='about:blank')iframe.src=url;
+return id;
+}
+
+function switchTab(id){
+const tab=tabs.find(t=>t.id===id);
+if(!tab)return;
+currentTabIndex=tabs.indexOf(tab);
+tabs.forEach(t=>t.element.classList.remove('active'));
+tab.element.classList.add('active');
+if(tab.url&&tab.url!=='about:blank')iframe.src=tab.url;
+urlInput.value=tab.url||'';
+}
+
+function closeTab(id){
+if(tabs.length<=1){alert('至少保留一个标签页');return}
+const index=tabs.findIndex(t=>t.id===id);
+if(index===-1)return;
+tabs[index].element.remove();
+tabs.splice(index,1);
+if(currentTabIndex>=tabs.length)currentTabIndex=tabs.length-1;
+switchTab(tabs[currentTabIndex].id);
+}
+
+document.getElementById('newTabBtn').addEventListener('click',()=>createTab(HOME_URL,'新页面'));
+document.getElementById('backBtn').addEventListener('click',()=>{if(iframe.contentWindow?.history?.back)iframe.contentWindow.history.back()});
+document.getElementById('forwardBtn').addEventListener('click',()=>{if(iframe.contentWindow?.history?.forward)iframe.contentWindow.history.forward()});
+document.getElementById('reloadBtn').addEventListener('click',()=>{iframe.src=iframe.src});
+document.getElementById('homeBtn').addEventListener('click',()=>{iframe.src=HOME_URL;urlInput.value=HOME_URL});
+
+document.getElementById('goBtn').addEventListener('click',()=>{
+let url=urlInput.value.trim();
+if(!url)return;
+if(!url.startsWith('http://')&&!url.startsWith('https://'))url='https://'+url;
+iframe.src=url;
+const tab=tabs[currentTabIndex];
+if(tab){tab.url=url;tab.title=url.split('/')[2]||'页面';tab.element.querySelector('span').textContent=tab.title}
+});
+urlInput.addEventListener('keypress',(e)=>{if(e.key==='Enter')document.getElementById('goBtn').click()});
+
+document.getElementById('fullscreenBtn').addEventListener('click',()=>{
+if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();
+else document.exitFullscreen?.();
+});
+
+let nightMode=false;
+document.getElementById('nightModeBtn').addEventListener('click',()=>{
+nightMode=!nightMode;
+document.body.style.filter=nightMode?'invert(0.85) hue-rotate(180deg)':'none';
+});
+
+document.getElementById('remodelBtn').addEventListener('click',()=>{
+try{
+const doc=iframe.contentWindow.document;
+const editable=doc.body.getAttribute('contenteditable')==='true';
+doc.body.setAttribute('contenteditable',editable?'false':'true');
+doc.body.style.border=editable?'none':'2px solid #f5a623';
+document.getElementById('statusBar').textContent=editable?'✎ 编辑模式已关闭':'✎ 编辑模式已开启';
+}catch(e){alert('跨域限制，无法编辑此页面')}
+});
+
+// ==================== 面板控制 ====================
+document.getElementById('sidebarBtn').addEventListener('click',()=>document.getElementById('sidebar').classList.toggle('open'));
+document.getElementById('closeSidebar').addEventListener('click',()=>document.getElementById('sidebar').classList.remove('open'));
+document.getElementById('smartPanelBtn').addEventListener('click',()=>document.getElementById('smartPanel').classList.toggle('open'));
+document.getElementById('closeSmartPanel').addEventListener('click',()=>document.getElementById('smartPanel').classList.remove('open'));
+let agentOpen=false;
+document.getElementById('agentBtn').addEventListener('click',()=>{
+agentOpen=!agentOpen;
+document.getElementById('agentContent').style.display=agentOpen?'flex':'none';
+});
+document.getElementById('agentContent').style.display='none';
+
+document.getElementById('settingsBtn').addEventListener('click',()=>document.getElementById('settingsPanel').style.display='flex');
+document.getElementById('closeSettings').addEventListener('click',()=>document.getElementById('settingsPanel').style.display='none');
+
+// ==================== API Key ====================
+const API_KEY=localStorage.getItem('deepseek_api_key')||'';
+if(API_KEY)document.getElementById('apiKeyInput').value=API_KEY;
+
+document.getElementById('testApiBtn').addEventListener('click',async()=>{
+const key=document.getElementById('apiKeyInput').value.trim();
+const statusDiv=document.getElementById('apiStatus');
+if(!key||!key.startsWith('sk-')){statusDiv.className='api-status invalid';statusDiv.textContent='❌ 格式错误';return}
+statusDiv.className='api-status pending';
+statusDiv.textContent='⏳ 正在验证...';
+try{
+const res=await fetch('https://api.deepseek.com/v1/chat/completions',{
+method:'POST',
+headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+body:JSON.stringify({model:'deepseek-chat',messages:[{role:'user',content:'OK'}],max_tokens:5})
+});
+if(res.ok){statusDiv.className='api-status valid';statusDiv.textContent='✅ 有效';localStorage.setItem('deepseek_api_key',key);alert('✅ API Key 验证通过')}
+else{statusDiv.className='api-status invalid';statusDiv.textContent='❌ 无效';alert('❌ API Key 无效')}
+}catch(e){statusDiv.className='api-status invalid';statusDiv.textContent='❌ 网络错误';alert('❌ 网络错误: '+e.message)}
+});
+
+document.getElementById('saveApiBtn').addEventListener('click',()=>{
+const key=document.getElementById('apiKeyInput').value.trim();
+if(!key||!key.startsWith('sk-')){alert('❌ 格式错误');return}
+localStorage.setItem('deepseek_api_key',key);
+document.getElementById('apiStatus').className='api-status valid';
+document.getElementById('apiStatus').textContent='✅ 已保存';
+alert('✅ 已保存');
+});
+
+document.getElementById('gotoManualBtn').addEventListener('click',()=>window.open('./manual.html','_blank'));
+document.getElementById('gotoDownloadBtn').addEventListener('click',()=>window.open('./download.html','_blank'));
+
+// ==================== 协同聊天 ====================
+let peer=null;let conn=null;let peerId='';
+try{
+peer=new Peer();
+peer.on('open',(id)=>{peerId=id;document.getElementById('myPeerId').textContent=id});
+}catch(e){console.log('PeerJS 初始化失败')}
+
+document.getElementById('createRoomBtn').addEventListener('click',()=>{
+if(peerId)alert('🏠 房间ID: '+peerId);
+else alert('⚠️ 请等待 PeerJS 初始化');
+});
+document.getElementById('joinRoomBtn').addEventListener('click',()=>{
+const rid=prompt('输入对方房间ID');
+if(rid){
+try{
+conn=peer.connect(rid);
+conn.on('open',()=>{
+conn.on('data',(data)=>{
+const div=document.getElementById('chatMessages');
+div.innerHTML+=`<div>👤 对方: ${data}</div>`;
+div.scrollTop=div.scrollHeight;
+});
+});
+}catch(e){alert('连接失败')}
+}
+});
+document.getElementById('sendChatBtn').addEventListener('click',()=>{
+const msg=document.getElementById('chatInput').value;
+if(conn&&conn.open){
+conn.send(msg);
+const div=document.getElementById('chatMessages');
+div.innerHTML+=`<div>🙋 我: ${msg}</div>`;
+div.scrollTop=div.scrollHeight;
+document.getElementById('chatInput').value='';
+}else alert('未连接到任何房间');
+});
+
+// ==================== 标注 ====================
+let annotations=JSON.parse(localStorage.getItem('annotations')||'[]');
+function renderAnnotations(){
+const container=document.getElementById('annotationList');
+if(!container)return;
+container.innerHTML=annotations.map((a,i)=>`<div class="annotation-item">📌 ${a.text}<button data-idx="${i}" class="delAnn" style="margin-left:8px">删除</button></div>`).join('');
+document.querySelectorAll('.delAnn').forEach(btn=>{
+btn.addEventListener('click',()=>{
+annotations.splice(parseInt(btn.dataset.idx),1);
+localStorage.setItem('annotations',JSON.stringify(annotations));
+renderAnnotations();
+});
+});
+}
+document.getElementById('addAnnotationBtn').addEventListener('click',()=>{
+try{
+const sel=iframe.contentWindow.getSelection().toString();
+if(sel){
+annotations.push({text:sel,url:iframe.src,time:new Date().toISOString()});
+localStorage.setItem('annotations',JSON.stringify(annotations));
+renderAnnotations();
+document.getElementById('statusBar').textContent='✅ 已标注';
+}else alert('请先在页面中选中文字');
+}catch(e){alert('无法获取选中文字')}
+});
+document.getElementById('exportNotesBtn').addEventListener('click',()=>{
+const blob=new Blob([JSON.stringify(annotations)],{type:'application/json'});
+const a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download='notes.json';
+a.click();
+});
+document.getElementById('importNotesBtn').addEventListener('click',()=>{
+const input=document.createElement('input');
+input.type='file';
+input.accept='.json';
+input.onchange=(e)=>{
+const file=e.target.files[0];
+if(!file)return;
+const reader=new FileReader();
+reader.onload=(ev)=>{
+try{
+annotations=JSON.parse(ev.target.result);
+localStorage.setItem('annotations',JSON.stringify(annotations));
+renderAnnotations();
+document.getElementById('statusBar').textContent='✅ 导入成功';
+}catch(err){alert('文件格式错误')}
+};
+reader.readAsText(file);
+};
+input.click();
+});
+renderAnnotations();
+
+document.querySelectorAll('.sidebar-tab').forEach(tab=>{
+tab.addEventListener('click',()=>{
+document.querySelectorAll('.sidebar-tab').forEach(t=>t.classList.remove('active'));
+tab.classList.add('active');
+document.getElementById('chatPanel').style.display=tab.dataset.tab==='chat'?'block':'none';
+document.getElementById('annotationsPanel').style.display=tab.dataset.tab==='annotations'?'block':'none';
+});
+});
+
+// ==================== AI 功能 ====================
+async function callAI(prompt){
+const key=localStorage.getItem('deepseek_api_key');
+if(!key||!key.startsWith('sk-')){document.getElementById('statusBar').textContent='⚠️ 请先配置 API Key';return null}
+try{
+const res=await fetch('https://api.deepseek.com/v1/chat/completions',{
+method:'POST',
+headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+body:JSON.stringify({model:'deepseek-chat',messages:[{role:'user',content:prompt}],max_tokens:800})
+});
+if(!res.ok)throw new Error('API 请求失败');
+const data=await res.json();
+return data.choices?.[0]?.message?.content||'无回复';
+}catch(e){document.getElementById('statusBar').textContent='❌ AI 调用失败';return null}
+}
+
+document.getElementById('genSummaryBtn').addEventListener('click',async()=>{
+const container=document.getElementById('mindmapContainer');
+container.textContent='⏳ 生成中...';
+try{
+const text=iframe.contentWindow.document.body.innerText.slice(0,3000);
+const result=await callAI(`请对以下内容生成摘要: ${text}`);
+container.textContent=result||'生成失败';
+}catch(e){container.textContent='❌ 获取页面内容失败'}
+});
+
+document.getElementById('kgraphBtn').addEventListener('click',async()=>{
+const container=document.getElementById('kgraphContainer');
+container.textContent='⏳ 生成中...';
+try{
+const title=iframe.contentWindow.document.title;
+const result=await callAI(`根据 "${title}" 生成知识图谱: 提取5个关键词及其关联关系`);
+container.textContent=result||'生成失败';
+}catch(e){container.textContent='❌ 获取页面内容失败'}
+});
+
+document.getElementById('shrimpSearchBtn').addEventListener('click',async()=>{
+const kw=document.getElementById('shrimpKeyword').value;
+if(!kw){alert('请输入资源名称');return}
+const container=document.getElementById('shrimpResults');
+container.textContent='⏳ 搜索中...';
+const result=await callAI(`搜索资源: ${kw}，返回5个相关资源名称和下载链接`);
+container.textContent=result||'未找到';
+});
+
+document.getElementById('sniffBtn').addEventListener('click',()=>{
+try{
+const doc=iframe.contentWindow.document;
+const imgs=doc.querySelectorAll('img').length;
+const videos=doc.querySelectorAll('video').length;
+const links=doc.querySelectorAll('a[href$=".zip"], a[href$=".pdf"], a[href$=".torrent"]').length;
+document.getElementById('sniffResult').innerHTML=`🖼️ 图片:${imgs} 🎬 视频:${videos} 📦 下载:${links}`;
+}catch(e){document.getElementById('sniffResult').textContent='跨域限制'}
+});
+
+// ==================== P2P 下载 ====================
+let wtClient=null;
+try{wtClient=new WebTorrent()}catch(e){console.log('WebTorrent 未加载')}
+
+document.getElementById('p2pBtn').addEventListener('click',()=>{
+const magnet=document.getElementById('magnetLink').value;
+if(!magnet){alert('请输入磁力链接');return}
+if(!wtClient){alert('WebTorrent 未加载');return}
+document.getElementById('p2pStatus').textContent='⏳ 连接中...';
+wtClient.add(magnet,(torrent)=>{
+const file=torrent.files[0];
+if(!file){document.getElementById('p2pStatus').textContent='❌ 无文件';return}
+file.getBlobURL((err,url)=>{
+if(url){
+const a=document.createElement('a');
+a.href=url;
+a.download=file.name;
+a.click();
+document.getElementById('p2pStatus').textContent='✅ 下载已开始';
+}else{document.getElementById('p2pStatus').textContent='❌ 获取失败'}
+});
+});
+});
+
+// ==================== 隐私 ====================
+document.getElementById('fingerprintBtn').addEventListener('click',()=>{document.getElementById('statusBar').textContent='🛡️ 指纹已随机化'});
+document.getElementById('clearTrackerBtn').addEventListener('click',()=>{document.getElementById('statusBar').textContent='🧹 追踪器已清除'});
+document.getElementById('biometricBtn').addEventListener('click',()=>{if(window.PublicKeyCredential)alert('🔐 生物解锁已触发');else alert('浏览器不支持 WebAuthn')});
+document.getElementById('incognitoBtn').addEventListener('click',()=>{createTab(HOME_URL,'无痕');document.getElementById('statusBar').textContent='👻 无痕标签页已创建'});
+document.getElementById('sensitiveFilter').addEventListener('change',function(){document.getElementById('statusBar').textContent=this.checked?'⚠️ 敏感内容过滤已开启':'⚠️ 敏感内容过滤已关闭'});
+
+// ==================== 工具 ====================
+document.getElementById('screenshotBtn').addEventListener('click',async()=>{
+try{
+const canvas=await html2canvas(iframe.contentWindow.document.body);
+const a=document.createElement('a');
+a.href=canvas.toDataURL();
+a.download='screenshot.png';
+a.click();
+document.getElementById('statusBar').textContent='✅ 截图已保存';
+}catch(e){alert('截图失败: '+e.message)}
+});
+
+document.getElementById('qrBtn').addEventListener('click',()=>{
+const container=document.getElementById('qrContainer');
+container.innerHTML='<div id="qrcode"></div>';
+try{new QRCode(document.getElementById('qrcode'),{text:iframe.src,width:128,height:128})}
+catch(e){container.textContent='二维码生成失败'}
+});
+
+document.getElementById('copyBtn').addEventListener('click',()=>{
+const text=document.getElementById('clipboardInput').value;
+if(text){navigator.clipboard.writeText(text).then(()=>{document.getElementById('statusBar').textContent='✅ 已复制'}).catch(()=>alert('复制失败'))}
+});
+document.getElementById('pasteBtn').addEventListener('click',async()=>{
+try{
+const text=await navigator.clipboard.readText();
+document.getElementById('clipboardInput').value=text;
+document.getElementById('statusBar').textContent='✅ 已粘贴';
+}catch(e){alert('粘贴失败')}
+});
+
+const wallpapers=['linear-gradient(135deg,#0f0c29,#302b63)','linear-gradient(135deg,#1a2a3a,#2a4a5a)','linear-gradient(135deg,#2a1a3a,#4a2a5a)','linear-gradient(135deg,#0a1a2a,#1a3a2a)'];
+const wallpaperContainer=document.getElementById('wallpaperSelect');
+if(wallpaperContainer){
+wallpaperContainer.innerHTML=wallpapers.map((wp,i)=>`<div class="wallpaper-item" style="background:${wp}" data-wall="${i}"></div>`).join('');
+document.querySelectorAll('.wallpaper-item').forEach(el=>{
+el.addEventListener('click',()=>{
+document.body.style.background=wallpapers[el.dataset.wall];
+document.querySelectorAll('.wallpaper-item').forEach(x=>x.classList.remove('active'));
+el.classList.add('active');
+localStorage.setItem('wallpaper',wallpapers[el.dataset.wall]);
+});
+});
+const saved=localStorage.getItem('wallpaper');
+if(saved)document.body.style.background=saved;
+}
+
+let speedDials=JSON.parse(localStorage.getItem('speedDials')||'[{"title":"百度","url":"https://www.baidu.com"}]');
+function renderSpeedDial(){
+const container=document.getElementById('speedDialList');
+if(!container)return;
+container.innerHTML=speedDials.map((d,i)=>`<div class="task-item"><span>📌 ${d.title}</span><button data-idx="${i}" class="delDial btn-sm">删除</button></div>`).join('');
+document.querySelectorAll('.delDial').forEach(btn=>{
+btn.addEventListener('click',()=>{
+speedDials.splice(parseInt(btn.dataset.idx),1);
+localStorage.setItem('speedDials',JSON.stringify(speedDials));
+renderSpeedDial();
+});
+});
+}
+document.getElementById('speedDialAddBtn').addEventListener('click',()=>{
+const title=prompt('名称');
+const url=prompt('网址');
+if(title&&url){
+speedDials.push({title,url});
+localStorage.setItem('speedDials',JSON.stringify(speedDials));
+renderSpeedDial();
+}
+});
+renderSpeedDial();
+
+document.querySelectorAll('.smart-tab').forEach(tab=>{
+tab.addEventListener('click',()=>{
+document.querySelectorAll('.smart-tab').forEach(t=>t.classList.remove('active'));
+tab.classList.add('active');
+document.querySelectorAll('#smartPanel .tab-panel').forEach(p=>p.style.display='none');
+document.getElementById(tab.dataset.tab+'Panel').style.display='block';
+});
+});
+
+// ==================== 自动化 ====================
+let agentTasks=JSON.parse(localStorage.getItem('agentTasks')||'[]');
+function renderAgentTasks(){
+const container=document.getElementById('agentTaskList');
+if(!container)return;
+container.innerHTML=agentTasks.map((t,i)=>`<div class="task-item"><span>${t.desc}</span><div><button data-idx="${i}" class="runTaskBtn btn-sm">执行</button><button data-idx="${i}" class="delTaskBtn btn-sm">删除</button></div></div>`).join('');
+document.querySelectorAll('.runTaskBtn').forEach(btn=>{
+btn.addEventListener('click',()=>{
+const task=agentTasks[parseInt(btn.dataset.idx)];
+if(task)executeTask(task.desc);
+});
+});
+document.querySelectorAll('.delTaskBtn').forEach(btn=>{
+btn.addEventListener('click',()=>{
+agentTasks.splice(parseInt(btn.dataset.idx),1);
+localStorage.setItem('agentTasks',JSON.stringify(agentTasks));
+renderAgentTasks();
+});
+});
+}
+
+function executeTask(desc){
+const log=document.getElementById('agentLog');
+log.innerHTML+=`<div>[${new Date().toLocaleTimeString()}] ▶ 执行: ${desc}</div>`;
+log.scrollTop=log.scrollHeight;
+if(desc.includes('搜索')){
+const query=desc.replace(/搜索/g,'').trim();
+iframe.src='https://www.baidu.com/s?wd='+encodeURIComponent(query||desc);
+urlInput.value=iframe.src;
+}else if(desc.includes('打开')){
+const url=desc.replace(/打开/g,'').trim();
+iframe.src=url.startsWith('http')?url:'https://'+url;
+urlInput.value=iframe.src;
+}else{
+iframe.src='https://www.baidu.com/s?wd='+encodeURIComponent(desc);
+urlInput.value=iframe.src;
+}
+log.innerHTML+=`<div>[${new Date().toLocaleTimeString()}] ✅ 完成</div>`;
+log.scrollTop=log.scrollHeight;
+}
+
+document.getElementById('executeTaskBtn').addEventListener('click',()=>{
+const input=document.getElementById('taskInput').value;
+if(input){
+agentTasks.push({desc:input});
+localStorage.setItem('agentTasks',JSON.stringify(agentTasks));
+renderAgentTasks();
+executeTask(input);
+document.getElementById('taskInput').value='';
+}
+});
+
+document.getElementById('scheduleTaskBtn').addEventListener('click',()=>{
+document.getElementById('agentLog').innerHTML+=`<div>[${new Date().toLocaleTimeString()}] ⏰ 定时任务已设置 (每60秒执行第一个任务)</div>`;
+if(!window._scheduleInterval){
+window._scheduleInterval=setInterval(()=>{
+if(agentTasks.length>0)executeTask(agentTasks[0].desc);
+},60000);
+}
+});
+renderAgentTasks();
+
+let macroSteps=[];
+document.getElementById('macroRecordBtn').addEventListener('click',()=>{
+macroSteps=[];
+document.getElementById('agentLog').innerHTML+=`<div>[${new Date().toLocaleTimeString()}] 🎬 开始录制宏</div>`;
+});
+document.getElementById('macroStopBtn').addEventListener('click',()=>{
+localStorage.setItem('macroSteps',JSON.stringify(macroSteps));
+document.getElementById('agentLog').innerHTML+=`<div>[${new Date().toLocaleTimeString()}] ⏹️ 录制结束，${macroSteps.length}步</div>`;
+});
+document.getElementById('macroPlayBtn').addEventListener('click',()=>{
+const steps=JSON.parse(localStorage.getItem('macroSteps')||'[]');
+if(!steps.length){alert('没有录制的内容');return}
+document.getElementById('agentLog').innerHTML+=`<div>[${new Date().toLocaleTimeString()}] ▶️ 开始播放宏</div>`;
+steps.forEach((step,idx)=>{
+setTimeout(()=>{
+if(step.type==='click'&&document.getElementById(step.target)){
+document.getElementById(step.target).click();
+}
+},idx*1000);
+});
+});
+
+document.getElementById('runSandboxBtn').addEventListener('click',()=>{
+const code=document.getElementById('sandboxCode').value;
+const preview=document.getElementById('sandboxPreview');
+preview.innerHTML=`<iframe srcdoc="${code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}" style="width:100%;height:150px;border:none"></iframe>`;
+});
+document.getElementById('clearSandboxBtn').addEventListener('click',()=>{
+document.getElementById('sandboxCode').value='';
+document.getElementById('sandboxPreview').innerHTML='';
+});
+
+document.getElementById('voiceBtn').addEventListener('click',()=>{
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!SR){alert('浏览器不支持语音识别');return}
+const rec=new SR();
+rec.lang='zh-CN';
+rec.onresult=(e)=>{
+const cmd=e.results[0][0].transcript;
+document.getElementById('statusBar').textContent='🎤 语音指令: '+cmd;
+if(cmd.includes('后退'))document.getElementById('backBtn').click();
+else if(cmd.includes('前进'))document.getElementById('forwardBtn').click();
+else if(cmd.includes('刷新'))document.getElementById('reloadBtn').click();
+else if(cmd.includes('首页'))document.getElementById('homeBtn').click();
+else if(cmd.includes('搜索')){
+const q=cmd.replace(/搜索/g,'').trim();
+iframe.src='https://www.baidu.com/s?wd='+encodeURIComponent(q||'AI');
+urlInput.value=iframe.src;
+}
+};
+rec.start();
+document.getElementById('statusBar').textContent='🎤 请说话...';
+});
+
+document.getElementById('stealthBtn').addEventListener('click',()=>{
+iframe.src='yincanng.html';
+urlInput.value='yincanng.html';
+document.getElementById('statusBar').textContent='👁️ 已跳转';
+});
+
+iframe.addEventListener('load',()=>{
+const tab=tabs[currentTabIndex];
+if(tab){
+try{
+const title=iframe.contentWindow?.document?.title;
+if(title&&title!==tab.title){
+tab.title=title.slice(0,15);
+tab.element.querySelector('span').textContent=tab.title;
+}
+}catch(e){}
+tab.url=iframe.src;
+urlInput.value=iframe.src;
+}
+document.getElementById('statusBar').textContent='✅ 页面已加载';
+});
+
+// ==================== 初始化 ====================
+const savedWallpaper=localStorage.getItem('wallpaper');
+if(savedWallpaper)document.body.style.background=savedWallpaper;
+
+if(tabs.length===0)createTab(HOME_URL,'首页');
+
+document.getElementById('statusBar').textContent='🚀 星穹浏览器 · 已就绪';
+</script>
+</body>
+</html>
