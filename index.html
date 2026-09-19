@@ -326,8 +326,19 @@ document.getElementById('apiStatus').textContent='✅ 已保存';
 alert('✅ 已保存');
 });
 
-document.getElementById('gotoManualBtn').addEventListener('click',()=>window.open('./manual.html','_blank'));
-document.getElementById('gotoDownloadBtn').addEventListener('click',()=>window.open('./download.html','_blank'));
+// ==================== 下载与说明书 ====================
+document.getElementById('gotoManualBtn').addEventListener('click',()=>{
+    window.open('./manual.html','_blank');
+});
+document.getElementById('gotoDownloadBtn').addEventListener('click',()=>{
+    const a=document.createElement('a');
+    a.href='./StartDome V1.0.apk';
+    a.download='StartDome V1.0.apk';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    document.getElementById('statusBar').textContent='⬇️ 正在下载 StartDome V1.0.apk...';
+});
 
 // ==================== 协同聊天 ====================
 let peer=null;let conn=null;let peerId='';
